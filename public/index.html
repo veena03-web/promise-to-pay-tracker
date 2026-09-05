@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Promise-to-Pay Tracker</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0;
+      padding: 40px;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #222;
+    }
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 30px;
+      font-weight: 600;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .form-box input {
+      padding: 10px;
+      margin: 6px 4px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255,255,255,0.85);
+    }
+    .form-box label {
+      color: white;
+      margin: 0 8px;
+      font-size: 14px;
+    }
+    button {
+      padding: 8px 16px;
+      margin: 4px;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.9);
+      font-weight: 600;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+    button:hover {
+      background: white;
+      transform: translateY(-2px);
+    }
+    .report {
+      color: white;
+      font-size: 15px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .report b { color: #ffe08a; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      color: white;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+    th {
+      background: rgba(255,255,255,0.1);
+      font-weight: 600;
+    }
+    tr:hover { background: rgba(255,255,255,0.08); }
+    .status-badge {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-block;
+    }
+    .promised { background: #3b82f6; }
+    .paid { background: #22c55e; }
+    .broken { background: #ef4444; }
+    .escalated { background: #f97316; }
+  </style>
+</head>
+<body>
+  <h1>💸 Promise-to-Pay Tracker</h1>
+
+  <div class="glass form-box">
+    <h3 style="color:white; margin-top:0;">Add New Promise</h3>
+    <input type="text" id="newName" placeholder="Customer name">
+    <input type="number" id="newAmount" placeholder="Amount (₹)">
+    <input type="date" id="newDate">
+    <label><input type="checkbox" id="newExact" checked> Exact date given</label>
+    <button onclick="createPromise()">➕ Add Promise</button>
+  </div>
+
+  <div class="glass">
+    <button onclick="checkBroken()">🔍 Check for Broken Promises</button>
+    <button onclick="refreshAll()">🔄 Refresh</button>
+  </div>
+
+  <div class="glass report" id="report">Loading report...</div>
+
+  <div class="glass">
+    <table id="promiseTable">
+      <thead>
+        <tr>
+          <th>Customer</th><th>Amount</th><th>Promised Date</th>
+          <th>Exact Date?</th><th>Status</th><th>Escalations</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const API = 'http://localhost:5000/api/promises';
+
+    async function loadPromises() {
+      const res = await fetch(API);
+      const data = await res.json();
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+      data.forEach(p => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${p.customerName}</td>
+            <td>₹${p.amount}</td>
+            <td>${new Date(p.promisedDate).toLocaleDateString()}</td>
+            <td>${p.hasExactDate ? 'Yes' : 'No'}</td>
+            <td><span class="status-badge ${p.status}">${p.status}</span></td>
+            <td>${p.escalationCount}</td>
+            <td>
+              ${p.status !== 'paid' ? `<button onclick="markPaid('${p._id}')">✅ Mark Paid</button>` : ''}
+              ${p.status === 'broken' || p.status === 'escalated' ? `<button onclick="escalate('${p._id}')">📩 Escalate</button>` : ''}
+            </td>
+          </tr>`;
+      });
+    }
+
+    async function createPromise() {
+      const customerName = document.getElementById('newName').value;
+      const amount = document.getElementById('newAmount').value;
+      const promisedDate = document.getElementById('newDate').value;
+      const hasExactDate = document.getElementById('newExact').checked;
+
+      if (!customerName || !amount || !promisedDate) {
+        alert('Please fill in name, amount, and date');
+        return;
+      }
+
+      await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerName, amount: Number(amount), promisedDate, hasExactDate })
+      });
+
+      document.getElementById('newName').value = '';
+      document.getElementById('newAmount').value = '';
+      document.getElementById('newDate').value = '';
+
+      refreshAll();
+    }
+
+    async function markPaid(id) {
+      await fetch(`${API}/${id}/pay`, { method: 'PATCH' });
+      refreshAll();
+    }
+
+    async function escalate(id) {
+      const res = await fetch(`${API}/${id}/escalate`, { method: 'POST' });
+      const data = await res.json();
+      alert(data.message + (data.sentText ? '\n\n' + data.sentText : ''));
+      loadPromises();
+    }
+
+    async function checkBroken() {
+      await fetch(`${API}/check-broken`);
+      refreshAll();
+    }
+
+    async function loadReport() {
+      const res = await fetch(`${API}/report`);
+      const r = await res.json();
+      document.getElementById('report').innerHTML = `
+        <span><b>Total:</b> ${r.totalPromises}</span>
+        <span><b>Paid:</b> ${r.paid}</span>
+        <span><b>Broken:</b> ${r.broken}</span>
+        <span><b>Escalated:</b> ${r.escalated}</span>
+        <span><b>Recovery Rate:</b> ${r.recoveryRatePercent}%</span>
+        <span><b>Recovered:</b> ₹${r.recoveredAmount}</span>
+        <span><b>At Risk:</b> ₹${r.atRiskAmount}</span>
+      `;
+    }
+
+    function refreshAll() {
+      loadPromises();
+      loadReport();
+    }
+
+    refreshAll();
+  </script>
+</body>
+</html>
