@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Promise = require('../models/Promise');
+const Promise = require('../models/promise');
 
 // 1. CREATE a new promise
 router.post('/', async (req, res) => {

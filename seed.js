@@ -1,6 +1,6 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const Promise = require('./models/Promise');
+const Promise = require('./models/promise');
 
 async function seed() {
   await mongoose.connect(process.env.MONGO_URI);
